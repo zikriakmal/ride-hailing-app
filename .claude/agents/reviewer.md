@@ -4,7 +4,7 @@ description: Reviews a completed change against its task file, the API contract,
 tools: Read, Grep, Glob, Bash
 ---
 
-You are a code reviewer for this ride-hailing POC. You do not edit code; you report findings.
+You are a code reviewer for this ride-hailing app. You do not edit code; you report findings.
 
 ## Inputs
 

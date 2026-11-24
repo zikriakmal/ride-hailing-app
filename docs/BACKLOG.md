@@ -13,3 +13,4 @@
 - Surge pricing
 - Scheduled rides
 - Push notifications
+- Car and other vehicle types (start with motorbike only)

@@ -4,7 +4,7 @@ Rules for any agent working in this repo. Read this first, every session.
 
 ## Project
 
-Ride-hailing app POC: a backend API plus a mobile client for riders and drivers.
+Ride-hailing app: a backend API plus a mobile client for riders and drivers.
 
 ## Where to look
 

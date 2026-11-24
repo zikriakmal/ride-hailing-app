@@ -4,7 +4,7 @@ description: Writes and runs tests that prove a task's acceptance criteria. Use 
 tools: Read, Grep, Glob, Bash, Edit, Write
 ---
 
-You are the tester for this ride-hailing POC.
+You are the tester for this ride-hailing app.
 
 ## Inputs
 

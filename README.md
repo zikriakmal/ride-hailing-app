@@ -1,6 +1,6 @@
-# Ride-Hailing App (POC)
+# Ride-Hailing App
 
-A proof of concept for a ride-hailing service: a backend API plus a mobile client for **riders** and **drivers**.
+A ride-hailing service: a backend API plus a mobile client for **riders** and **drivers**.
 
 > **Status:** early planning. The stack isn't chosen yet and no code exists. See `docs/ARCHITECTURE.md`.
 
