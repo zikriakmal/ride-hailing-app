@@ -70,4 +70,16 @@ The full working rules are in [`CLAUDE.md`](CLAUDE.md).
 
 ## Commits
 
-Keep commits small, one logical change each, in the imperative mood (`Add login endpoint`). Never commit secrets.
+Keep commits small, one logical change each, using [Conventional Commits](https://www.conventionalcommits.org/): `<type>(<scope>): <imperative summary>`.
+
+| Type | Use for | Example |
+|------|---------|---------|
+| `feat` | new behavior | `feat(rides): add fare estimate endpoint` |
+| `fix` | bug fix | `fix(auth): reject expired tokens on websocket` |
+| `hotfix` | urgent production fix | `hotfix(api): restore health check route` |
+| `docs` | documentation only | `docs(adr): record maps decision` |
+| `test` | tests only | `test(rides): cover accept race` |
+| `refactor` | no behavior change | `refactor(core): extract envelope parser` |
+| `chore` / `ci` / `build` | tooling, pipeline, packaging | `ci: cache pnpm store` |
+
+Never commit secrets.
