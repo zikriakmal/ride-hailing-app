@@ -1,0 +1,8 @@
+.env
+node_modules/
+dist/
+.expo/
+frontend/packages/core/src/api/generated/
+backend/bin/
+coverage/
+.DS_Store
