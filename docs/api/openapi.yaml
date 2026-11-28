@@ -1,23 +1,95 @@
 openapi: 3.1.0
 info:
   title: Ride-Hailing API
-  version: 0.1.0
+  version: 0.3.0
+  license:
+    name: UNLICENSED
   description: |
     Contract between backend and mobile. Change this file FIRST,
     then update backend and mobile to match.
+
+    Conventions: camelCase fields, string IDs (uuid), ISO 8601 UTC timestamps,
+    money as integer IDR, coordinates as WGS84 degrees.
+
+    Every response body (success and error) is wrapped in the same envelope:
+    { "status": <HTTP status code>, "data": <payload or null>, "errors": <array or null> }
+    - Success: `data` holds the payload, `errors` is null.
+    - Error: `data` is null, `errors` has at least one item. Validation errors
+      have one item per invalid field, with `field` set to its path
+      (e.g. `vehicle.plate`). Schemas named `*Envelope` / `ErrorResponse`
+      are the full bodies; the other schemas are what goes in `data`.
+    Realtime (WebSocket at /ws) events are documented in docs/api/realtime.md.
 servers:
   - url: http://localhost:3000
     description: Local
 
+security:
+  - bearerAuth: []
+
 tags:
   - name: auth
+    description: Signup, login, current user
+  - name: riders
+    description: Rider availability and location
+  - name: rides
+    description: Estimate, request, lifecycle, history
+  - name: health
+    description: Liveness
+  - name: tickets
+    description: Consumers and riders reporting problems
+  - name: admin
+    description: Back office (staff roles `support` and `admin` only)
 
 paths:
+  /health:
+    get:
+      tags: [health]
+      summary: Liveness check
+      operationId: getHealth
+      security: []
+      responses:
+        '200':
+          description: Server is up
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthEnvelope'
+
+  /auth/signup:
+    post:
+      tags: [auth]
+      summary: Create a consumer or rider account
+      operationId: signup
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SignupRequest'
+      responses:
+        '201':
+          description: Account created and logged in
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthEnvelope'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '409':
+          description: Email already registered (`EMAIL_TAKEN`)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
   /auth/login:
     post:
       tags: [auth]
       summary: Log in with email and password
       operationId: login
+      description: Returns `403 ACCOUNT_SUSPENDED` for suspended or disabled accounts. Staff tokens expire after 12 h, others after 7 days.
+      security: []
       requestBody:
         required: true
         content:
@@ -30,11 +102,959 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/AuthResponse'
+                $ref: '#/components/schemas/AuthEnvelope'
         '400':
           $ref: '#/components/responses/BadRequest'
         '401':
           $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /me:
+    get:
+      tags: [auth]
+      summary: Current user (used to restore a session on app launch)
+      operationId: getMe
+      responses:
+        '200':
+          description: The logged-in user
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserEnvelope'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /riders/me/status:
+    put:
+      tags: [riders]
+      summary: Rider goes online or offline
+      description: Going offline while on a trip is rejected with `409 INVALID_TRANSITION`.
+      operationId: setRiderStatus
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [status]
+              properties:
+                status:
+                  type: string
+                  enum: [online, offline]
+      responses:
+        '200':
+          description: New status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RiderEnvelope'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  /riders/me/location:
+    put:
+      tags: [riders]
+      summary: Rider reports current position (every 3 s while online or on a trip)
+      description: |
+        If the rider is on a trip, the server pushes `rider:location` to the consumer.
+        Ignored (still 200) when the rider is offline.
+      operationId: updateRiderLocation
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LatLng'
+      responses:
+        '200':
+          description: Stored (`data` is null)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NullEnvelope'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /rides/estimate:
+    post:
+      tags: [rides]
+      summary: Fare estimate for a pickup and dropoff (consumer)
+      operationId: estimateRide
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RideRouteRequest'
+      responses:
+        '200':
+          description: Estimate
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FareEstimateEnvelope'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /rides:
+    post:
+      tags: [rides]
+      summary: Request a ride (consumer)
+      description: |
+        Creates a ride in `requested` and offers it to online riders within 3 km
+        (`ride:offered`). Expires after 60 s if nobody accepts.
+        The fare is recomputed server-side; clients never send it.
+      operationId: requestRide
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RideRouteRequest'
+      responses:
+        '201':
+          description: Ride requested
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RideEnvelope'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          description: Consumer already has an active ride (`ACTIVE_RIDE_EXISTS`)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+    get:
+      tags: [rides]
+      summary: Trip history for the current user (consumer or rider)
+      description: Rides in `completed`, `cancelled`, or `expired` (expired only for consumers), newest first.
+      operationId: listRides
+      parameters:
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 50
+            default: 20
+        - name: cursor
+          in: query
+          description: Opaque value from a previous page's `nextCursor`.
+          schema:
+            type: string
+      responses:
+        '200':
+          description: One page of rides
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RidePageEnvelope'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /rides/current:
+    get:
+      tags: [rides]
+      summary: The current user's active ride, if any
+      description: Used on app launch and after a socket reconnect to resync state.
+      operationId: getCurrentRide
+      responses:
+        '200':
+          description: Active ride, or `data` null when there is none
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CurrentRideEnvelope'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /rides/{rideId}:
+    parameters:
+      - $ref: '#/components/parameters/RideId'
+    get:
+      tags: [rides]
+      summary: One ride (consumer or assigned rider only)
+      operationId: getRide
+      responses:
+        '200':
+          description: The ride
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RideEnvelope'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /rides/{rideId}/accept:
+    parameters:
+      - $ref: '#/components/parameters/RideId'
+    post:
+      tags: [rides]
+      summary: Accept an offered ride (rider; first accept wins)
+      operationId: acceptRide
+      responses:
+        '200':
+          description: Accepted; the ride now has this rider
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RideEnvelope'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: |
+            `RIDE_NOT_AVAILABLE` (taken, cancelled, or expired),
+            or `RIDER_NOT_AVAILABLE` (rider offline or already on a trip).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /rides/{rideId}/arrive:
+    parameters:
+      - $ref: '#/components/parameters/RideId'
+    post:
+      tags: [rides]
+      summary: Rider is at pickup (accepted → arrived)
+      operationId: arriveRide
+      responses:
+        '200':
+          $ref: '#/components/responses/RideOk'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  /rides/{rideId}/start:
+    parameters:
+      - $ref: '#/components/parameters/RideId'
+    post:
+      tags: [rides]
+      summary: Consumer on board (arrived → in_progress)
+      operationId: startRide
+      responses:
+        '200':
+          $ref: '#/components/responses/RideOk'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  /rides/{rideId}/complete:
+    parameters:
+      - $ref: '#/components/parameters/RideId'
+    post:
+      tags: [rides]
+      summary: Trip done, cash received (in_progress → completed)
+      description: Sets `fareFinal` to `fareEstimate`.
+      operationId: completeRide
+      responses:
+        '200':
+          $ref: '#/components/responses/RideOk'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  /rides/{rideId}/cancel:
+    parameters:
+      - $ref: '#/components/parameters/RideId'
+    post:
+      tags: [rides]
+      summary: Cancel a ride
+      description: |
+        Consumer: while `requested`, `accepted`, or `arrived`.
+        Assigned rider: while `accepted` only.
+        Otherwise `409 INVALID_TRANSITION`.
+      operationId: cancelRide
+      responses:
+        '200':
+          $ref: '#/components/responses/RideOk'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  /tickets:
+    post:
+      tags: [tickets]
+      summary: Report a problem (consumer or rider)
+      description: |
+        `rideId`, if given, must be a ride the caller took part in.
+        Category `safety` is created with priority `urgent`.
+      operationId: createTicket
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateTicketRequest'
+      responses:
+        '201':
+          description: Ticket created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TicketEnvelope'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    get:
+      tags: [tickets]
+      summary: My tickets, newest activity first (consumer or rider)
+      operationId: listMyTickets
+      parameters:
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+      responses:
+        '200':
+          description: One page of tickets (without messages)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TicketPageEnvelope'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /tickets/{ticketId}:
+    parameters:
+      - $ref: '#/components/parameters/TicketId'
+    get:
+      tags: [tickets]
+      summary: One of my tickets with its messages
+      description: Internal staff notes are never included. Staff authors are shown as name "Support".
+      operationId: getMyTicket
+      responses:
+        '200':
+          description: The ticket
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TicketEnvelope'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /tickets/{ticketId}/messages:
+    parameters:
+      - $ref: '#/components/parameters/TicketId'
+    post:
+      tags: [tickets]
+      summary: Reply on my ticket (reopens a resolved ticket)
+      operationId: addMyTicketMessage
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TicketMessageRequest'
+      responses:
+        '200':
+          description: Updated ticket
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TicketEnvelope'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /admin/users:
+    get:
+      tags: [admin]
+      summary: Search consumers and riders
+      description: Staff only (`support` or `admin`). `q` matches name, email, phone, or vehicle plate (case-insensitive, contains).
+      operationId: listUsersAdmin
+      parameters:
+        - name: role
+          in: query
+          description: Filter by role.
+          schema:
+            type: string
+            enum: [consumer, rider]
+        - name: status
+          in: query
+          description: Filter by status.
+          schema:
+            type: string
+            enum: [active, suspended]
+        - name: q
+          in: query
+          description: Search text.
+          schema:
+            type: string
+            minLength: 2
+            maxLength: 100
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+      responses:
+        '200':
+          description: One page of users
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminUserPageEnvelope'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /admin/users/{userId}:
+    parameters:
+      - $ref: '#/components/parameters/UserId'
+    get:
+      tags: [admin]
+      summary: User profile for staff
+      description: Staff only (`support` or `admin`).
+      operationId: getUserAdmin
+      responses:
+        '200':
+          description: The user
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminUserEnvelope'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    patch:
+      tags: [admin]
+      summary: Edit a user's name, phone, or vehicle
+      description: Admin only (`support` gets `403 FORBIDDEN`). Writes an audit entry. `vehicle` only for riders.
+      operationId: updateUserAdmin
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AdminUserUpdate'
+      responses:
+        '200':
+          description: Updated user
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminUserEnvelope'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /admin/users/{userId}/suspend:
+    parameters:
+      - $ref: '#/components/parameters/UserId'
+    post:
+      tags: [admin]
+      summary: Suspend a consumer or rider
+      description: |
+        Admin only (`support` gets `403 FORBIDDEN`). Writes an audit entry.
+        Revokes access immediately: current token stops working, WebSocket is closed, a rider is set offline.
+      operationId: suspendUser
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReasonRequest'
+      responses:
+        '200':
+          description: Suspended user
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminUserEnvelope'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: '`USER_HAS_ACTIVE_RIDE` (force-cancel it first) or `INVALID_TRANSITION` (already suspended)'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /admin/users/{userId}/unsuspend:
+    parameters:
+      - $ref: '#/components/parameters/UserId'
+    post:
+      tags: [admin]
+      summary: Lift a suspension
+      description: Admin only (`support` gets `403 FORBIDDEN`). Writes an audit entry.
+      operationId: unsuspendUser
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReasonRequest'
+      responses:
+        '200':
+          description: Active user
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminUserEnvelope'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: '`INVALID_TRANSITION` (not suspended)'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /admin/rides:
+    get:
+      tags: [admin]
+      summary: All rides, for assistance and the live map
+      description: Staff only (`support` or `admin`). `status=active` means requested, accepted, arrived, or in_progress. Newest first. Active rides include `rider.location`.
+      operationId: listRidesAdmin
+      parameters:
+        - name: status
+          in: query
+          description: Filter by status, or `active`.
+          schema:
+            type: string
+            enum: [active, requested, accepted, arrived, in_progress, completed, cancelled, expired]
+        - name: userId
+          in: query
+          description: Rides where this user is the consumer or the rider.
+          schema:
+            type: string
+            format: uuid
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+      responses:
+        '200':
+          description: One page of rides
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RidePageEnvelope'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /admin/rides/{rideId}:
+    parameters:
+      - $ref: '#/components/parameters/RideId'
+    get:
+      tags: [admin]
+      summary: Ride with full timeline and linked tickets
+      description: Staff only (`support` or `admin`).
+      operationId: getRideAdmin
+      responses:
+        '200':
+          description: The ride
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminRideDetailEnvelope'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /admin/rides/{rideId}/cancel:
+    parameters:
+      - $ref: '#/components/parameters/RideId'
+    post:
+      tags: [admin]
+      summary: Force-cancel an active ride
+      description: |
+        Staff only (`support` or `admin`). Writes an audit entry. Sets `cancelledBy: support`, frees the rider (`online`),
+        and pushes `ride:updated` to both parties (`ride:offer_withdrawn` while `requested`).
+      operationId: forceCancelRide
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReasonRequest'
+      responses:
+        '200':
+          description: Cancelled ride
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminRideDetailEnvelope'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: '`INVALID_TRANSITION` (ride already finished)'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /admin/tickets:
+    get:
+      tags: [admin]
+      summary: Ticket queue
+      description: Staff only (`support` or `admin`). Sorted by priority (`urgent` first), then oldest update first.
+      operationId: listTicketsAdmin
+      parameters:
+        - name: status
+          in: query
+          description: Filter by status.
+          schema:
+            type: string
+            enum: [open, in_progress, resolved]
+        - name: category
+          in: query
+          description: Filter by category.
+          schema:
+            $ref: '#/components/schemas/TicketCategory'
+        - name: priority
+          in: query
+          description: Filter by priority.
+          schema:
+            type: string
+            enum: [normal, urgent]
+        - name: assigneeId
+          in: query
+          description: Filter by assigned staff member.
+          schema:
+            type: string
+            format: uuid
+        - name: userId
+          in: query
+          description: Tickets created by this user.
+          schema:
+            type: string
+            format: uuid
+        - name: rideId
+          in: query
+          description: Tickets about this ride.
+          schema:
+            type: string
+            format: uuid
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+      responses:
+        '200':
+          description: One page of tickets
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TicketPageEnvelope'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /admin/tickets/{ticketId}:
+    parameters:
+      - $ref: '#/components/parameters/TicketId'
+    get:
+      tags: [admin]
+      summary: Ticket with all messages, including internal notes
+      description: Staff only (`support` or `admin`).
+      operationId: getTicketAdmin
+      responses:
+        '200':
+          description: The ticket
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TicketEnvelope'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    patch:
+      tags: [admin]
+      summary: Change status, priority, or assignee
+      description: Staff only (`support` or `admin`). Writes an audit entry per changed field. Assigning an `open` ticket moves it to `in_progress`.
+      operationId: updateTicketAdmin
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AdminTicketUpdate'
+      responses:
+        '200':
+          description: Updated ticket
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TicketEnvelope'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /admin/tickets/{ticketId}/messages:
+    parameters:
+      - $ref: '#/components/parameters/TicketId'
+    post:
+      tags: [admin]
+      summary: Reply to the user, or add an internal note
+      description: Staff only (`support` or `admin`). Writes an audit entry. Replies (not notes) push `ticket:updated` to the ticket owner.
+      operationId: addTicketMessageAdmin
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AdminTicketMessageRequest'
+      responses:
+        '200':
+          description: Updated ticket
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TicketEnvelope'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /admin/audit-log:
+    get:
+      tags: [admin]
+      summary: Staff action history (read-only, newest first)
+      description: Staff only (`support` or `admin`).
+      operationId: listAuditLog
+      parameters:
+        - name: actorId
+          in: query
+          description: Staff member who acted.
+          schema:
+            type: string
+            format: uuid
+        - name: targetType
+          in: query
+          description: Kind of target.
+          schema:
+            type: string
+            enum: [user, ride, ticket, staff]
+        - name: targetId
+          in: query
+          description: Target id (needs `targetType`).
+          schema:
+            type: string
+            format: uuid
+        - name: action
+          in: query
+          description: Filter by action.
+          schema:
+            $ref: '#/components/schemas/AuditAction'
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+      responses:
+        '200':
+          description: One page of audit entries
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuditPageEnvelope'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /admin/staff:
+    get:
+      tags: [admin]
+      summary: List staff accounts
+      description: Admin only (`support` gets `403 FORBIDDEN`).
+      operationId: listStaff
+      responses:
+        '200':
+          description: All staff
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StaffListEnvelope'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+    post:
+      tags: [admin]
+      summary: Create a staff account
+      description: Admin only (`support` gets `403 FORBIDDEN`). Writes an audit entry.
+      operationId: createStaff
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateStaffRequest'
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserEnvelope'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          description: '`EMAIL_TAKEN`'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /admin/staff/{userId}:
+    parameters:
+      - $ref: '#/components/parameters/UserId'
+    patch:
+      tags: [admin]
+      summary: Change a staff member's role or disable them
+      description: Admin only (`support` gets `403 FORBIDDEN`). Writes an audit entry. An admin can't change their own role or disable themselves (`409 CANNOT_MODIFY_SELF`), so at least one admin always remains.
+      operationId: updateStaff
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StaffUpdate'
+      responses:
+        '200':
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserEnvelope'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: '`CANNOT_MODIFY_SELF`'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
 
 components:
   securitySchemes:
@@ -42,6 +1062,43 @@ components:
       type: http
       scheme: bearer
       bearerFormat: JWT
+
+  parameters:
+    UserId:
+      name: userId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    TicketId:
+      name: ticketId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    Limit:
+      name: limit
+      in: query
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 50
+        default: 20
+    Cursor:
+      name: cursor
+      in: query
+      description: Opaque value from a previous page's `nextCursor`.
+      schema:
+        type: string
+    RideId:
+      name: rideId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
 
   schemas:
     LoginRequest:
@@ -55,7 +1112,34 @@ components:
           type: string
           minLength: 8
 
+    SignupRequest:
+      type: object
+      required: [role, name, email, phone, password]
+      properties:
+        role:
+          type: string
+          enum: [consumer, rider]
+        name:
+          type: string
+          minLength: 1
+          maxLength: 100
+        email:
+          type: string
+          format: email
+        phone:
+          type: string
+          pattern: '^\+62[0-9]{8,13}$'
+          example: '+6281234567890'
+        password:
+          type: string
+          minLength: 8
+          maxLength: 72
+        vehicle:
+          description: Required when `role` is `rider`, rejected otherwise.
+          $ref: '#/components/schemas/Vehicle'
+
     AuthResponse:
+      description: '`data` of signup and login.'
       type: object
       required: [accessToken, user]
       properties:
@@ -66,39 +1150,791 @@ components:
 
     User:
       type: object
-      required: [id, role, email]
+      required: [id, role, name, email, phone, status]
       properties:
         id:
           type: string
+          format: uuid
         role:
           type: string
-          enum: [rider, driver]
+          enum: [consumer, rider, support, admin]
+        status:
+          type: string
+          enum: [active, suspended]
+          description: '`suspended` for consumers/riders, "disabled" for staff; either way the account cannot log in.'
         name:
           type: string
         email:
           type: string
           format: email
+        phone:
+          type: string
+        rider:
+          description: Present only when `role` is `rider`.
+          $ref: '#/components/schemas/Rider'
+
+    Vehicle:
+      type: object
+      required: [plate, model]
+      properties:
+        plate:
+          type: string
+          minLength: 1
+          maxLength: 15
+          example: B 1234 XYZ
+        model:
+          type: string
+          minLength: 1
+          maxLength: 50
+          example: Honda Beat
+
+    Rider:
+      type: object
+      required: [status, vehicle]
+      properties:
+        status:
+          type: string
+          enum: [offline, online, on_trip]
+        vehicle:
+          $ref: '#/components/schemas/Vehicle'
+
+    LatLng:
+      type: object
+      required: [lat, lng]
+      properties:
+        lat:
+          type: number
+          minimum: -90
+          maximum: 90
+        lng:
+          type: number
+          minimum: -180
+          maximum: 180
+
+    Place:
+      allOf:
+        - $ref: '#/components/schemas/LatLng'
+        - type: object
+          properties:
+            address:
+              type: string
+              maxLength: 200
+              description: Display text from the device geocoder; not validated.
+
+    RideRouteRequest:
+      type: object
+      required: [pickup, dropoff]
+      properties:
+        pickup:
+          $ref: '#/components/schemas/Place'
+        dropoff:
+          $ref: '#/components/schemas/Place'
+
+    FareEstimate:
+      type: object
+      required: [distanceMeters, fareIdr]
+      properties:
+        distanceMeters:
+          type: integer
+          minimum: 0
+        fareIdr:
+          type: integer
+          minimum: 0
+
+    RideStatus:
+      type: string
+      enum: [requested, accepted, arrived, in_progress, completed, cancelled, expired]
+
+    RideParty:
+      description: The other side of the ride, as shown in the app.
+      type: object
+      required: [id, name, phone]
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        phone:
+          type: string
+
+    RideRider:
+      allOf:
+        - $ref: '#/components/schemas/RideParty'
+        - type: object
+          required: [vehicle]
+          properties:
+            vehicle:
+              $ref: '#/components/schemas/Vehicle'
+            location:
+              description: Last known position; only while the ride is active.
+              oneOf:
+                - $ref: '#/components/schemas/LatLng'
+                - type: 'null'
+
+    Ride:
+      type: object
+      required:
+        [id, status, pickup, dropoff, distanceMeters, fareEstimate, fareFinal, consumer, rider, cancelledBy, requestedAt, expiresAt, acceptedAt, arrivedAt, startedAt, completedAt, cancelledAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        status:
+          $ref: '#/components/schemas/RideStatus'
+        pickup:
+          $ref: '#/components/schemas/Place'
+        dropoff:
+          $ref: '#/components/schemas/Place'
+        distanceMeters:
+          type: integer
+        fareEstimate:
+          type: integer
+          description: IDR
+        fareFinal:
+          type: [integer, 'null']
+          description: IDR, set on completion
+        consumer:
+          $ref: '#/components/schemas/RideParty'
+        rider:
+          oneOf:
+            - $ref: '#/components/schemas/RideRider'
+            - type: 'null'
+        cancelledBy:
+          type: [string, 'null']
+          enum: [consumer, rider, support, null]
+        requestedAt:
+          type: string
+          format: date-time
+        expiresAt:
+          type: string
+          format: date-time
+          description: requestedAt + 60 s
+        acceptedAt:
+          type: [string, 'null']
+          format: date-time
+        arrivedAt:
+          type: [string, 'null']
+          format: date-time
+        startedAt:
+          type: [string, 'null']
+          format: date-time
+        completedAt:
+          type: [string, 'null']
+          format: date-time
+        cancelledAt:
+          type: [string, 'null']
+          format: date-time
 
     Error:
+      description: One error. Lives in the envelope's `errors` array.
       type: object
       required: [code, message]
       properties:
         code:
           type: string
-          example: INVALID_CREDENTIALS
+          enum:
+            - VALIDATION_ERROR      # 400, one item per invalid field
+            - INVALID_CREDENTIALS   # 401 login
+            - UNAUTHORIZED          # 401 missing/invalid/expired token
+            - FORBIDDEN             # 403 wrong role or not your ride
+            - NOT_FOUND             # 404
+            - EMAIL_TAKEN           # 409 signup
+            - ACTIVE_RIDE_EXISTS    # 409 request ride
+            - RIDE_NOT_AVAILABLE    # 409 accept
+            - RIDER_NOT_AVAILABLE  # 409 accept
+            - INVALID_TRANSITION    # 409 lifecycle / status change
+            - ACCOUNT_SUSPENDED     # 403 login or any call by a suspended/disabled account
+            - USER_HAS_ACTIVE_RIDE  # 409 suspend
+            - CANNOT_MODIFY_SELF    # 409 staff update
+            - RATE_LIMITED          # 429 too many login attempts
+            - INTERNAL_ERROR        # 500
+          example: VALIDATION_ERROR
         message:
           type: string
+          example: must be a valid email
+        field:
+          description: Set for VALIDATION_ERROR. Path of the invalid input, dot-separated (`email`, `vehicle.plate`, `pickup.lat`, `limit`).
+          type: string
+          example: email
+
+    # ---- Envelope: every response body has this shape ----
+
+    Envelope:
+      type: object
+      required: [status, data, errors]
+      properties:
+        status:
+          type: integer
+          description: Same as the HTTP status code.
+          example: 200
+        data: {}
+        errors:
+          oneOf:
+            - type: array
+              items:
+                $ref: '#/components/schemas/Error'
+            - type: 'null'
+
+    ErrorResponse:
+      allOf:
+        - $ref: '#/components/schemas/Envelope'
+        - type: object
+          properties:
+            status:
+              minimum: 400
+            data:
+              type: 'null'
+            errors:
+              type: array
+              minItems: 1
+              items:
+                $ref: '#/components/schemas/Error'
+      example:
+        status: 400
+        data: null
+        errors:
+          - { code: VALIDATION_ERROR, field: email, message: must be a valid email }
+          - { code: VALIDATION_ERROR, field: password, message: must be at least 8 characters }
+
+    SuccessEnvelope:
+      allOf:
+        - $ref: '#/components/schemas/Envelope'
+        - type: object
+          properties:
+            status:
+              minimum: 200
+              maximum: 299
+            errors:
+              type: 'null'
+
+    HealthEnvelope:
+      allOf:
+        - $ref: '#/components/schemas/SuccessEnvelope'
+        - type: object
+          properties:
+            data:
+              type: object
+              required: [status]
+              properties:
+                status:
+                  type: string
+                  const: ok
+
+    NullEnvelope:
+      allOf:
+        - $ref: '#/components/schemas/SuccessEnvelope'
+        - type: object
+          properties:
+            data:
+              type: 'null'
+
+    AuthEnvelope:
+      allOf:
+        - $ref: '#/components/schemas/SuccessEnvelope'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/AuthResponse'
+
+    UserEnvelope:
+      allOf:
+        - $ref: '#/components/schemas/SuccessEnvelope'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/User'
+
+    RiderEnvelope:
+      allOf:
+        - $ref: '#/components/schemas/SuccessEnvelope'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/Rider'
+
+    FareEstimateEnvelope:
+      allOf:
+        - $ref: '#/components/schemas/SuccessEnvelope'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/FareEstimate'
+
+    RideEnvelope:
+      allOf:
+        - $ref: '#/components/schemas/SuccessEnvelope'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/Ride'
+
+    CurrentRideEnvelope:
+      allOf:
+        - $ref: '#/components/schemas/SuccessEnvelope'
+        - type: object
+          properties:
+            data:
+              oneOf:
+                - $ref: '#/components/schemas/Ride'
+                - type: 'null'
+
+    RidePageEnvelope:
+      allOf:
+        - $ref: '#/components/schemas/SuccessEnvelope'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/RidePage'
+
+    RidePage:
+      type: object
+      required: [items, nextCursor]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Ride'
+        nextCursor:
+          type: [string, 'null']
+    # ---- Tickets ----
+
+    TicketCategory:
+      type: string
+      enum: [lost_item, fare, safety, rider_behavior, consumer_behavior, app_problem, account, other]
+
+    CreateTicketRequest:
+      type: object
+      required: [category, message]
+      properties:
+        category:
+          $ref: '#/components/schemas/TicketCategory'
+        rideId:
+          type: string
+          format: uuid
+        message:
+          type: string
+          minLength: 1
+          maxLength: 2000
+
+    TicketMessageRequest:
+      type: object
+      required: [body]
+      properties:
+        body:
+          type: string
+          minLength: 1
+          maxLength: 2000
+
+    AdminTicketMessageRequest:
+      allOf:
+        - $ref: '#/components/schemas/TicketMessageRequest'
+        - type: object
+          properties:
+            internal:
+              type: boolean
+              default: false
+              description: true = staff-only note, never shown to the user
+
+    AdminTicketUpdate:
+      type: object
+      minProperties: 1
+      properties:
+        status:
+          type: string
+          enum: [open, in_progress, resolved]
+        priority:
+          type: string
+          enum: [normal, urgent]
+        assigneeId:
+          type: [string, 'null']
+          format: uuid
+          description: A staff user id, or null to unassign
+
+    PersonRef:
+      type: object
+      required: [id, name, role]
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        role:
+          type: string
+          enum: [consumer, rider, support, admin]
+
+    TicketSummary:
+      type: object
+      required: [id, number, category, priority, status, rideId, createdBy, assignee, createdAt, updatedAt, resolvedAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        number:
+          type: integer
+          description: Human-friendly ticket number, e.g. 1042
+        category:
+          $ref: '#/components/schemas/TicketCategory'
+        priority:
+          type: string
+          enum: [normal, urgent]
+        status:
+          type: string
+          enum: [open, in_progress, resolved]
+        rideId:
+          type: [string, 'null']
+          format: uuid
+        createdBy:
+          $ref: '#/components/schemas/PersonRef'
+        assignee:
+          description: Always null in user-facing endpoints.
+          oneOf:
+            - $ref: '#/components/schemas/PersonRef'
+            - type: 'null'
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        resolvedAt:
+          type: [string, 'null']
+          format: date-time
+
+    TicketMessage:
+      type: object
+      required: [id, author, body, internal, createdAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        author:
+          $ref: '#/components/schemas/PersonRef'
+        body:
+          type: string
+        internal:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+
+    Ticket:
+      allOf:
+        - $ref: '#/components/schemas/TicketSummary'
+        - type: object
+          required: [messages]
+          properties:
+            messages:
+              type: array
+              items:
+                $ref: '#/components/schemas/TicketMessage'
+
+    # ---- Back office ----
+
+    ReasonRequest:
+      type: object
+      required: [reason]
+      properties:
+        reason:
+          type: string
+          minLength: 3
+          maxLength: 500
+
+    AdminUser:
+      allOf:
+        - $ref: '#/components/schemas/User'
+        - type: object
+          required: [createdAt, suspendedAt, suspendReason, activeRideId, stats]
+          properties:
+            createdAt:
+              type: string
+              format: date-time
+            suspendedAt:
+              type: [string, 'null']
+              format: date-time
+            suspendReason:
+              type: [string, 'null']
+            activeRideId:
+              type: [string, 'null']
+              format: uuid
+            stats:
+              type: object
+              required: [ridesCompleted, ridesCancelled, openTickets]
+              properties:
+                ridesCompleted:
+                  type: integer
+                ridesCancelled:
+                  type: integer
+                openTickets:
+                  type: integer
+
+    AdminUserUpdate:
+      type: object
+      required: [reason]
+      minProperties: 2
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 100
+        phone:
+          type: string
+          pattern: '^\+62[0-9]{8,13}$'
+        vehicle:
+          $ref: '#/components/schemas/Vehicle'
+        reason:
+          type: string
+          minLength: 3
+          maxLength: 500
+
+    TimelineEvent:
+      type: object
+      required: [at, type, summary, actor]
+      properties:
+        at:
+          type: string
+          format: date-time
+        type:
+          type: string
+          enum: [status_changed, staff_action, ticket_opened]
+        status:
+          $ref: '#/components/schemas/RideStatus'
+        summary:
+          type: string
+          example: Accepted by rider Budi (B 1234 XYZ)
+        actor:
+          description: null for server actions (e.g. expiry)
+          oneOf:
+            - $ref: '#/components/schemas/PersonRef'
+            - type: 'null'
+
+    AdminRideDetail:
+      type: object
+      required: [ride, cancelReason, timeline, tickets]
+      properties:
+        ride:
+          $ref: '#/components/schemas/Ride'
+        cancelReason:
+          type: [string, 'null']
+          description: Set when staff force-cancelled
+        timeline:
+          type: array
+          description: Oldest first
+          items:
+            $ref: '#/components/schemas/TimelineEvent'
+        tickets:
+          type: array
+          items:
+            $ref: '#/components/schemas/TicketSummary'
+
+    AuditAction:
+      type: string
+      enum:
+        - user.updated
+        - user.suspended
+        - user.unsuspended
+        - ride.force_cancelled
+        - ticket.assigned
+        - ticket.status_changed
+        - ticket.priority_changed
+        - ticket.replied
+        - ticket.note_added
+        - staff.created
+        - staff.updated
+
+    AuditEntry:
+      type: object
+      required: [id, at, actor, action, targetType, targetId, reason, before, after]
+      properties:
+        id:
+          type: string
+          format: uuid
+        at:
+          type: string
+          format: date-time
+        actor:
+          description: null when the server CLI acted (e.g. `create-admin`)
+          oneOf:
+            - $ref: '#/components/schemas/PersonRef'
+            - type: 'null'
+        action:
+          $ref: '#/components/schemas/AuditAction'
+        targetType:
+          type: string
+          enum: [user, ride, ticket, staff]
+        targetId:
+          type: string
+          format: uuid
+        reason:
+          type: [string, 'null']
+        before:
+          type: [object, 'null']
+          description: Changed fields before the action (never passwords)
+        after:
+          type: [object, 'null']
+          description: Changed fields after the action
+
+    CreateStaffRequest:
+      type: object
+      required: [name, email, password, role]
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 100
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+          minLength: 12
+          maxLength: 72
+          description: Initial password, shared with the staff member out of band
+        role:
+          type: string
+          enum: [support, admin]
+
+    StaffUpdate:
+      type: object
+      required: [reason]
+      minProperties: 2
+      properties:
+        role:
+          type: string
+          enum: [support, admin]
+        disabled:
+          type: boolean
+        reason:
+          type: string
+          minLength: 3
+          maxLength: 500
+
+    TicketPage:
+      type: object
+      required: [items, nextCursor]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/TicketSummary'
+        nextCursor:
+          type: [string, 'null']
+
+    AdminUserPage:
+      type: object
+      required: [items, nextCursor]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/AdminUser'
+        nextCursor:
+          type: [string, 'null']
+
+    AuditPage:
+      type: object
+      required: [items, nextCursor]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/AuditEntry'
+        nextCursor:
+          type: [string, 'null']
+
+    TicketEnvelope:
+      allOf:
+        - $ref: '#/components/schemas/SuccessEnvelope'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/Ticket'
+
+    TicketPageEnvelope:
+      allOf:
+        - $ref: '#/components/schemas/SuccessEnvelope'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/TicketPage'
+
+    AdminUserEnvelope:
+      allOf:
+        - $ref: '#/components/schemas/SuccessEnvelope'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/AdminUser'
+
+    AdminUserPageEnvelope:
+      allOf:
+        - $ref: '#/components/schemas/SuccessEnvelope'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/AdminUserPage'
+
+    AdminRideDetailEnvelope:
+      allOf:
+        - $ref: '#/components/schemas/SuccessEnvelope'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/AdminRideDetail'
+
+    AuditPageEnvelope:
+      allOf:
+        - $ref: '#/components/schemas/SuccessEnvelope'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/AuditPage'
+
+    StaffListEnvelope:
+      allOf:
+        - $ref: '#/components/schemas/SuccessEnvelope'
+        - type: object
+          properties:
+            data:
+              type: array
+              items:
+                $ref: '#/components/schemas/User'
 
   responses:
-    BadRequest:
-      description: Invalid input
+    RideOk:
+      description: Updated ride
       content:
         application/json:
           schema:
-            $ref: '#/components/schemas/Error'
+            $ref: '#/components/schemas/RideEnvelope'
+    BadRequest:
+      description: Invalid input (`VALIDATION_ERROR`)
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
     Unauthorized:
       description: Missing or invalid credentials
       content:
         application/json:
           schema:
-            $ref: '#/components/schemas/Error'
+            $ref: '#/components/schemas/ErrorResponse'
+    Forbidden:
+      description: Authenticated, but not allowed (`FORBIDDEN`)
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    NotFound:
+      description: No such resource, or not visible to this user (`NOT_FOUND`)
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    Conflict:
+      description: Not allowed in the current state (`INVALID_TRANSITION`)
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
