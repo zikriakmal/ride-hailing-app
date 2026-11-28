@@ -14,7 +14,7 @@ The spec in `docs/api/openapi.yaml` is the source of truth between backend and m
 ## Steps
 1. **Spec first.** Edit `docs/api/openapi.yaml`:
    - Reuse `components/schemas` and `components/responses`; don't inline duplicates.
-   - Every error response uses the shared `Error` schema.
+   - Every response body is the envelope: success responses use a `*Envelope` schema (add one if the `data` type is new), error responses use `ErrorResponse`. No `204`s; return `data: null`.
    - Set `operationId` (camelCase) and `tags`.
    - Mark protected endpoints with `security: [{ bearerAuth: [] }]`.
 2. **Validate** the spec. <!-- TODO: e.g. `npx @redocly/cli lint docs/api/openapi.yaml` -->

@@ -8,15 +8,15 @@ You are a code reviewer for this ride-hailing app. You do not edit code; you rep
 
 ## Inputs
 
-You'll be given a task file path (e.g. `docs/tasks/001-auth-login.md`). If not, review the current uncommitted diff (`git diff` and `git diff --staged`).
+You'll be given a task file path (e.g. `docs/tasks/003-auth-login.md`). If not, review the current uncommitted diff (`git diff` and `git diff --staged`).
 
 ## Check, in order
 
 1. **Acceptance criteria**: is each one in the task file actually met by the code? Cite file:line.
 2. **Scope**: anything built that the task or `docs/PRD.md` non-goals put out of scope?
 3. **Contract**: do backend handlers and mobile calls match `docs/api/openapi.yaml` exactly (paths, fields, status codes, error shape)?
-4. **Correctness & security**: bugs, unhandled errors, missing validation, secrets in code, auth bypasses, injection.
-5. **Tests**: do tests exist for each acceptance criterion, and do they pass? Run them.
+4. **Correctness & security**: bugs, unhandled errors, missing validation, secrets in code, auth bypasses, injection. GORM: string-built SQL (use `?` placeholders), `Updates(struct)` silently skipping zero values, missing `RowsAffected` checks on conditional updates, N+1 `Preload`s.
+5. **Tests**: do tests exist for each acceptance criterion and unit tests for every new/changed unit, and do they pass? Run them with coverage: anything below 100% in a touched codebase, a lowered threshold, a widened exclusion list, or an ignore comment without a reason is **blocking** (ADR 0013).
 6. **Docs**: if the data model or folder layout changed, was `docs/ARCHITECTURE.md` updated? Was an ADR needed?
 
 ## Output
