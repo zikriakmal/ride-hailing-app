@@ -25,7 +25,8 @@
 
 - [ ] <observable behavior, happy path>
 - [ ] <error path>
-- [ ] Tests cover the cases above and pass
+- [ ] Unit tests added for every new/changed function, handler, slice, endpoint, schema, hook, and component
+- [ ] Tests cover the cases above and pass; coverage is 100% in every touched codebase (ADR 0013), output pasted in Notes
 
 ## Notes
 

@@ -7,7 +7,7 @@ description: Use when choosing a stack component, library, pattern, or trade-off
 
 ## When to use
 - Picking a technology (database, realtime transport, maps provider, auth approach, framework)
-- Choosing a pattern with real trade-offs (e.g. polling vs websockets for driver location)
+- Choosing a pattern with real trade-offs (e.g. polling vs websockets for rider location)
 - Reversing or replacing an earlier decision
 - Not for: obvious or easily reversible choices (formatting, variable names)
 
