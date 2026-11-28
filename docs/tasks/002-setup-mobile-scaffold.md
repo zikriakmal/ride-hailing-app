@@ -40,6 +40,8 @@ A developer can run both the Consumer app and the Rider app on real phones from 
 - [ ] `applyServerErrors` calls `setError` per `field` and puts field-less errors on `root.serverError` (unit test)
 - [ ] Atoms and `FormField` render and fire their callbacks; `FormField` shows the RHF error message (RNTL tests)
 - [ ] ESLint fails on `@ride/ui` importing `@ride/core`, a package importing from an app, and a deep import into a feature (proved once, then removed)
+- [ ] Release config: Android `usesCleartextTraffic=false` outside dev, iOS ATS on; no secrets in `app.config.ts` beyond the restricted Maps key (docs/SECURITY.md)
+- [ ] ESLint security rules on (`no-eval`, `react/no-danger`); `osv-scanner` clean on `pnpm-lock.yaml`
 - [ ] `pnpm -r lint`, `pnpm -r typecheck`, and `pnpm -r test` pass
 - [ ] `pnpm -r test:coverage` reports 100% for all five workspaces and fails when an untested branch is added (proved once, then removed)
 

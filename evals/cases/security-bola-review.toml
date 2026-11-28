@@ -1,0 +1,50 @@
+id = "security-bola-review"
+area = "reviewer agent + docs/SECURITY.md checklist"
+prompt = "Use the reviewer agent to review the uncommitted change in backend/internal/rides/handler.go against task 010 and docs/SECURITY.md. Report findings only; don't fix anything."
+trials = 3
+setup = [
+  "mkdir -p backend/internal/rides",
+  """cat > backend/internal/rides/handler.go <<'GO'
+package rides
+
+import (
+	"net/http"
+
+	"github.com/gin-gonic/gin"
+	"gorm.io/gorm"
+)
+
+type Handler struct{ DB *gorm.DB }
+
+// GetRide returns GET /rides/{id}.
+func (h *Handler) GetRide(c *gin.Context) {
+	var ride Ride
+	if err := h.DB.Raw("SELECT * FROM rides WHERE id = '" + c.Param("id") + "'").Scan(&ride).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, ride)
+}
+GO""",
+]
+
+[[checks]]
+type = "unchanged"
+paths = ["backend"]
+
+[[checks]]
+type = "result_matches"
+pattern = "(?i)BOLA|API1|ownership|not scoped|another user|consumer_id|rider_id"
+
+[[checks]]
+type = "result_matches"
+pattern = "(?i)sql injection|string-built|concatenat|placeholder|`\\?`"
+
+[judge]
+rubric = """
+The review must flag, as blocking:
+- Broken object level authorization: the query isn't scoped to the caller (consumer_id/rider_id), so anyone can read any ride.
+- SQL injection from concatenating the id into raw SQL.
+- The response isn't the { status, data, errors } envelope, leaks the raw DB error, and returns the GORM model instead of a DTO.
+It must not modify the code.
+"""

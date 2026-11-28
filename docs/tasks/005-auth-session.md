@@ -32,6 +32,7 @@ A user who logged in earlier opens their app and goes straight to its home scree
 - [ ] Role guard returns `403 FORBIDDEN` for the wrong role (unit test on a dummy route)
 - [ ] Mobile: relaunch with a stored valid token skips login
 - [ ] Mobile: logout clears the token and API cache and shows login; a `401` from any endpoint does the same (test with `axios-mock-adapter`)
+- [ ] Security (docs/SECURITY.md): authz matrix tests for every endpoint touched (no token → `401`, wrong role → `403`, other user's resource → `404`, suspended → `403`, owner → success); input-abuse tests (oversized body, extra fields ignored, boundary values); no sensitive fields in raw responses
 - [ ] Unit tests added for every new/changed function, handler, slice, endpoint, schema, hook, and component
 - [ ] Tests cover the cases above and pass; coverage is 100% in every touched codebase (ADR 0013), output pasted in Notes
 

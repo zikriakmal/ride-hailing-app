@@ -43,6 +43,7 @@ deploy/
 ├── nginx/ride-hailing-admin.conf # host nginx server block for admin.<domain> (installed by hand)
 ├── create-db.sql                # one-time: role + database on the existing Postgres
 ├── .env.example                 # production variables (real file lives at /opt/ride/.env)
+├── deploy.sh                    # forced SSH command for CI: validate SHA → pull → migrate → up
 ├── backup.sh                    # pg_dump → age encrypt → sha256 → rotate (VPS storage only)
 ├── backup-verify.sh             # weekly: checksum + test restore into a throwaway container
 └── provision.md                 # one-time VPS setup checklist
@@ -333,7 +334,7 @@ Check first: free RAM (`free -m`, want ≥ 256 MB spare), free disk (≥ 10 GB),
 1. PR → `ci.yml` must pass to merge.
 2. Merge to `main` → `ci.yml` on `main` → `deploy.yml`:
    - build + push `ride-hailing-api:<sha>` and `ride-hailing-backoffice:<sha>` (+ `:latest`)
-   - SSH: `cd /opt/ride && IMAGE_TAG=<sha> docker compose pull api && docker compose run --rm migrate && docker compose up -d api backoffice` (no DB container to touch)
+   - SSH `deploy@host <sha>`: the key's forced command `/opt/ride/deploy.sh` validates the SHA, then runs `IMAGE_TAG=<sha> docker compose pull api backoffice && docker compose run --rm migrate && docker compose up -d api backoffice` (no DB container to touch; the key can't do anything else, see docs/SECURITY.md)
    - smoke: `GET https://api.<domain>/health` → `200` and `GET https://admin.<domain>/` → `200` within 60 s, else redeploy previous tag and fail
 3. Expected downtime per deploy: a few seconds (nginx answers `502` meanwhile); apps reconnect the WebSocket and resync. nginx is never reloaded by CI.
 

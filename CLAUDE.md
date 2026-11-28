@@ -13,6 +13,7 @@ Ride-hailing app: a backend API plus a mobile client for consumers and riders.
 | What we're building and why (and what we're NOT building) | `docs/PRD.md` |
 | Stack, data model, folder structure | `docs/ARCHITECTURE.md` |
 | Hosting, CI/CD, deploy runbook | `docs/INFRA.md` |
+| Security rules, OWASP mapping, checklists | `docs/SECURITY.md` |
 | Backend ↔ mobile contract (REST) | `docs/api/openapi.yaml` |
 | Realtime messages (WebSocket) | `docs/api/realtime.md` |
 | Why a past choice was made | `docs/decisions/` |
@@ -31,6 +32,7 @@ Ride-hailing app: a backend API plus a mobile client for consumers and riders.
 7. **Done means verified.** A task is done only when its acceptance criteria are checked off and tests pass. Show the command output; don't just claim it.
 8. **Update the task file.** Set `Status:` and tick acceptance criteria as you go; add notes on anything surprising.
 9. **Tests ship with the feature, coverage stays 100%.** Every task that adds or changes code adds unit tests for it in the same change. The backend and every mobile app/package must stay at 100% coverage (ADR 0013). Never lower a threshold, widen exclusions, or add an unexplained ignore comment to get there.
+10. **Secure by default.** Follow `docs/SECURITY.md` (OWASP ASVS L2, API Top 10, MASVS; ADR 0016): scope every query by the caller, guard every route by role, bind generated types and write explicit fields, set limits, never log secrets or personal data. Every endpoint task ships authz matrix tests. Never weaken a security check or add a scanner exception without asking.
 
 ## Commands
 
@@ -45,6 +47,7 @@ Filled in by tasks 001 and 002. Until then they are `TBD`.
 - Coverage (must be 100%): `TBD` (backend: `go-test-coverage`; mobile: `pnpm -r test:coverage`)
 - Lint/format: `TBD`
 - Lint API spec: `npx @redocly/cli lint docs/api/openapi.yaml`
+- Harness evals (after changing CLAUDE.md, agents, skills, or SECURITY.md): `python3 evals/run.py` (see `evals/README.md`)
 - Deploy: automatic on merge to `main` (`.github/workflows/deploy.yml`); rollback via manual run with `tag`
 
 ## Conventions

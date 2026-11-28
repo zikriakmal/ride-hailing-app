@@ -37,6 +37,7 @@ A consumer confirms the estimate and requests a ride. Every online rider within 
 - [ ] After 60 s with no accept → `expired`; consumer gets `ride:updated`, offered riders get `ride:offer_withdrawn` `expired` (fake timers)
 - [ ] `GET /rides/current` → `200` with the active ride or `data: null`; `GET /rides/{id}` by an unrelated user → `404`
 - [ ] Mobile: consumer sees searching state and expiry message; rider sees and loses the offer card
+- [ ] Security (docs/SECURITY.md): authz matrix tests for every endpoint touched (no token → `401`, wrong role → `403`, other user's resource → `404`, suspended → `403`, owner → success); input-abuse tests (oversized body, extra fields ignored, boundary values); no sensitive fields in raw responses
 - [ ] Unit tests added for every new/changed function, handler, slice, endpoint, schema, hook, and component
 - [ ] Tests cover the cases above and pass; coverage is 100% in every touched codebase (ADR 0013), output pasted in Notes
 

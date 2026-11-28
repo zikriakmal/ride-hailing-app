@@ -27,6 +27,7 @@ One developer can test a full ride without walking around: the Rider app can fak
 - [ ] Toggle is absent in production builds (`__DEV__` false)
 - [ ] With the toggle on, sent positions step toward the target and stop at it (unit test of the step function)
 - [ ] Seed script creates the two accounts idempotently
+- [ ] Security (docs/SECURITY.md, MASVS): nothing sensitive outside secure store or in logs; release build is HTTPS/WSS-only
 - [ ] Unit tests added for every new/changed function, handler, slice, endpoint, schema, hook, and component
 - [ ] Tests cover the cases above and pass; coverage is 100% in every touched codebase (ADR 0013), output pasted in Notes
 

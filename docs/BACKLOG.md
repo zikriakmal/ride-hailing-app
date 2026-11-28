@@ -44,6 +44,13 @@
 - Live updates in the back office over WebSocket instead of polling
 - Staff self-service password change / reset
 
+### Security
+- Certificate pinning in the mobile apps
+- Breached-password check (k-anonymity HIBP range API) at signup and staff creation
+- Account deletion and personal-data export (UU PDP data subject requests)
+- External pentest / bug bounty
+- WAF or fail2ban jails for API abuse patterns
+
 ### Platform
 - Push notifications (offers while the app is backgrounded)
 - Background location for riders

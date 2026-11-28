@@ -14,6 +14,7 @@ Merging to `main` builds the backend image in GitHub Actions, pushes it to GHCR,
 - Set up the VPS per the `docs/INFRA.md` checklist (`deploy/provision.md`): capacity check, DNS, `deploy` user, Docker, `ufw`, `fail2ban`, `/opt/ride/.env`
 - Create the `ride` role + database on the existing Postgres with `deploy/create-db.sql`; `~/.pgpass` for `deploy`
 - Install the nginx server block, `nginx -t`, reload, `certbot --nginx -d api.<domain>`; other sites on the VPS keep working
+- `deploy/deploy.sh` (forced SSH command): accepts only a 40-char hex SHA from `$SSH_ORIGINAL_COMMAND`, then pull → migrate → up → health check; `authorized_keys` entry `command="/opt/ride/deploy.sh",no-port-forwarding,no-agent-forwarding,no-pty` (docs/SECURITY.md)
 - `.github/workflows/deploy.yml`: `workflow_run` after `ci` on `main` + `workflow_dispatch(tag)`; build + push `ghcr.io/<owner>/ride-hailing-api:<sha>` and `:latest`; SSH deploy (pull → migrate → up); smoke test with auto-rollback to the previous tag; `production` environment
 - `deploy/backup.sh` + cron: daily `pg_dump -Fc`, `age`-encrypted to the owner + verify public keys, `.sha256`, retention 7 daily / 4 weekly / 3 monthly, 20% free-disk guard, `last-success` file — all on VPS storage (`/var/backups/ride-hailing`, `0700`), no bucket (ADR 0011)
 - `deploy/backup-verify.sh` + weekly cron: checksum check and test restore into a throwaway `--network none` Postgres container
@@ -44,6 +45,8 @@ Merging to `main` builds the backend image in GitHub Actions, pushes it to GHCR,
 - [ ] With free disk below the threshold, `backup.sh` refuses to run and logs why; rotation keeps exactly 7/4/3 files after a simulated month
 - [ ] No private key for the owner exists on the VPS (`find / -name 'owner.key'` is empty)
 - [ ] No secrets in the repo or the image (`docker history` shows none)
+- [ ] The deploy key can't open a shell or run anything but `deploy.sh`; a non-SHA argument is rejected
+- [ ] `nmap` from outside shows only 22, 80, 443; TLS scan (`testssl.sh` or SSL Labs) grade A, TLS 1.2+ only
 - [ ] `docs/INFRA.md` matches what was built
 
 ## Notes

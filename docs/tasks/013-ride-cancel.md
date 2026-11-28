@@ -31,6 +31,7 @@ The consumer can cancel before the trip starts; the rider can cancel before arri
 - [ ] Unrelated user → `404`; rider status back to `online` after cancel
 - [ ] Offered riders get `ride:offer_withdrawn` `cancelled` when a `requested` ride is cancelled
 - [ ] Mobile: cancel button only shown when allowed; other party sees the message
+- [ ] Security (docs/SECURITY.md): authz matrix tests for every endpoint touched (no token → `401`, wrong role → `403`, other user's resource → `404`, suspended → `403`, owner → success); input-abuse tests (oversized body, extra fields ignored, boundary values); no sensitive fields in raw responses
 - [ ] Unit tests added for every new/changed function, handler, slice, endpoint, schema, hook, and component
 - [ ] Tests cover the cases above and pass; coverage is 100% in every touched codebase (ADR 0013), output pasted in Notes
 

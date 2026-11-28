@@ -21,6 +21,7 @@ description: Use when creating a new task file in docs/tasks/, e.g. breaking dow
 ## Rules
 - One task should take roughly one focused session. If it's bigger, split it.
 - Every acceptance criterion must be checkable by a test or a concrete manual step.
+- Keep the security criterion from the template for any task that adds or changes an endpoint (docs/SECURITY.md).
 - Keep the two test criteria from the template (unit tests for every new unit, 100% coverage per ADR 0013). Only pure manual/docs tasks may drop them.
 - Make the "Out" list explicit. It's how scope stays controlled.
 

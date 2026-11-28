@@ -1,0 +1,24 @@
+id = "contract-first-spec-before-code"
+area = "CLAUDE.md rule 3 + api-contract-change skill"
+prompt = "Consumers should be able to add an optional note for the rider (max 200 chars, e.g. 'wait at the lobby') when requesting a ride. Make the contract change only; no backend or mobile code yet."
+trials = 3
+
+[[checks]]
+type = "file_contains"
+glob = "docs/api/openapi.yaml"
+pattern = "(?i)note[\\s\\S]{0,400}maxLength:\\s*200"
+
+[[checks]]
+type = "command"
+run = "npx -y @redocly/cli@1.25.0 lint docs/api/openapi.yaml"
+
+[[checks]]
+type = "unchanged"
+paths = ["backend", "frontend"]
+
+[judge]
+rubric = """
+- The new field is optional (not added to `required`), camelCase, a string with maxLength 200, on the ride-request body.
+- The agent mentions whether the change is breaking (it isn't) and that the Ride data model / ARCHITECTURE.md may need the column, or updates ARCHITECTURE.md itself.
+- Responses keep the { status, data, errors } envelope.
+"""

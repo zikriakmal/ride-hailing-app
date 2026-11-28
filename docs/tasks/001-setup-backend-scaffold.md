@@ -17,6 +17,9 @@ A developer can clone the repo, start Postgres and the backend with documented c
 - `.env.example` kept in sync
 - Response helpers that write the `{ status, data, errors }` envelope for success and errors; validation middleware maps each failure to one `VALIDATION_ERROR` item with `field`; panic recovery → `500 INTERNAL_ERROR`
 - `GET /health`
+- Security baseline (docs/SECURITY.md, ADR 0016): HTTP server timeouts, 1 MB body limit, request ID middleware, API security headers (`nosniff`, `Cache-Control: no-store` when authenticated, no `Server` version), Gin release mode in production, rate-limiter middleware (in-memory token bucket, keyed by user ID or IP, returns `429 RATE_LIMITED`) ready for later routes, refuse to start in production with a `JWT_SECRET` < 32 bytes
+- Route inventory test: every registered Gin route exists in `openapi.yaml` and every spec path is registered (API9)
+- `golangci-lint` config enabling `gosec`, `errcheck`, `bodyclose`, `sqlclosecheck`; `govulncheck ./...` command
 - `oapi-codegen` generating `internal/api/api.gen.go` from the spec (`gin-server` + strict server); `OapiRequestValidator` middleware with an error handler that writes the envelope
 - Gin router with route groups (public / authenticated / `/ws`), slog logger and envelope-writing recovery replacing Gin's defaults
 - `internal/testutil`: test DB setup + a helper that validates a response against `docs/api/openapi.yaml`
@@ -39,6 +42,8 @@ A developer can clone the repo, start Postgres and the backend with documented c
 - [ ] `docker compose up -d` + documented install/run commands start the backend; `GET /health` → `200 {"status":200,"data":{"status":"ok"},"errors":null}`
 - [ ] `goose up` creates `User`, `Rider`, `Ride` tables matching `docs/ARCHITECTURE.md`; a test checks the GORM models against the migrated schema
 - [ ] Missing a required env var → backend exits on startup with a message naming the variable
+- [ ] Body > 1 MB → `413` envelope; a route missing from the spec (or a spec path with no route) fails the inventory test; rate limiter returns `429 RATE_LIMITED` after the limit (fake clock)
+- [ ] `gosec` and `govulncheck` run clean
 - [ ] Unknown route → `404` envelope with `NOT_FOUND`; a panicking handler → `500` envelope with `INTERNAL_ERROR`, no stack trace in the body; envelope `status` always equals the HTTP status
 - [ ] Request with two invalid fields → `400` envelope with two `VALIDATION_ERROR` items, each with its `field` (one test)
 - [ ] Contract-test helper fails a test when a response doesn't match the spec (proved by one test)

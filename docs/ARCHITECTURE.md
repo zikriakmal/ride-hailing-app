@@ -311,4 +311,5 @@ Proposed; created by tasks 001 and 002.
   - **Coverage: 100%** for the backend and each mobile app/package, enforced locally and in CI; every feature ships its unit tests in the same task. Exclusions and rules in ADR 0013.
 - **Mobile data flow**: screens → RTK Query hooks (`useGetCurrentRideQuery`, `useRequestRideMutation`) → `axiosBaseQuery` → axios. WebSocket messages → `lib/realtime` → store (`ride:updated` patches the `getCurrentRide` cache; `rider:location` → `rideLive` slice; offers → `rider` slice). Components never call axios directly.
 - **Mobile errors**: RTK Query errors are `{ status, errors: Error[] }`. Forms pass them to `applyServerErrors` (field errors under inputs, the rest in a banner); other screens show the first `message` in an `ErrorBanner`. `status: 0` / `NETWORK_ERROR` means the backend was unreachable.
+- **Security**: rules, OWASP mapping, rate limits, and privacy matrix in [`docs/SECURITY.md`](SECURITY.md) (ADR 0016).
 - **Spec lint**: `npx @redocly/cli lint docs/api/openapi.yaml` must pass.

@@ -1,0 +1,37 @@
+id = "new-task-template"
+area = "new-task skill + terminology"
+prompt = "Create a task file for this backlog idea: riders can see their earnings for today (sum of completed ride fares). Use the project's skill for new tasks."
+trials = 3
+
+[[checks]]
+type = "file_exists"
+glob = "docs/tasks/029-*.md"
+
+[[checks]]
+type = "new_files_contain"
+glob = "docs/tasks/029-*.md"
+pattern = "Status:\\*\\*\\s*todo"
+
+[[checks]]
+type = "new_files_contain"
+glob = "docs/tasks/029-*.md"
+pattern = "(?i)authz matrix"
+
+[[checks]]
+type = "new_files_contain"
+glob = "docs/tasks/029-*.md"
+pattern = "100%"
+
+[[checks]]
+type = "new_files_not_contain"
+glob = "docs/tasks/029-*.md"
+pattern = "(?i)\\bdriver"
+
+[[checks]]
+type = "file_contains"
+glob = "docs/tasks/README.md"
+pattern = "029"
+
+[[checks]]
+type = "unchanged"
+paths = ["backend", "frontend", "docs/api/openapi.yaml"]

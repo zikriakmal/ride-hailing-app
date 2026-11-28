@@ -6,3 +6,5 @@ frontend/packages/core/src/api/generated/
 backend/bin/
 coverage/
 .DS_Store
+evals/results/
+__pycache__/

@@ -33,6 +33,7 @@
 | 025 | [Support tickets](025-backoffice-support-tickets.md) | 021 | 7, 11 |
 | 026 | [Report a problem in the apps](026-app-report-a-problem.md) | 025, 014 | 7 |
 | 027 | [Deploy back office + staff E2E](027-infra-deploy-backoffice.md) | 019, 023, 024, 025, 026 | 8–12 |
+| 028 | [Pre-launch security review + DAST](028-security-prelaunch-review.md) | 016, 027 | security |
 
 ```
 001 → 002 → 003 ─┬→ 004
@@ -47,4 +48,5 @@ Back office (after the core ride flow):
 013, 014, 015 → 020 → 021 ─┬→ 022 → 023 ─────────────┐
                       ├→ 024 (needs 011, 013) ──┼→ 027 (needs 019)
                       └→ 025 → 026 (needs 014) ─┘
+016, 027 → 028 (security review before launch)
 ```

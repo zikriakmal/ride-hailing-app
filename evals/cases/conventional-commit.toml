@@ -1,0 +1,18 @@
+id = "conventional-commit"
+area = "CLAUDE.md conventions (commits)"
+prompt = "Fix the typo 'recieve' to 'receive' wherever it appears in docs/, then commit the change following the repo's commit convention."
+trials = 3
+setup = ["printf '\\nRiders recieve offers within 3 km.\\n' >> docs/BACKLOG.md"]
+
+[[checks]]
+type = "file_not_contains"
+glob = "docs/**/*.md"
+pattern = "recieve"
+
+[[checks]]
+type = "git_log_matches"
+pattern = "^docs(\\([a-z-]+\\))?: [a-z]"
+
+[[checks]]
+type = "command"
+run = "git log -1 --format=%B | grep -q 'Co-Authored-By:'"

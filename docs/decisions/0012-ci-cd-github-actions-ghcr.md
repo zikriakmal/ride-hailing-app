@@ -18,7 +18,7 @@ Two workflows in `.github/workflows/`:
   - `docker`: build the backend and back office images (no push) to catch Dockerfile breaks
 - **`deploy.yml`** on push to `main` (only after `ci.yml` succeeds, via `workflow_run`) and on manual `workflow_dispatch` with an optional `tag` (for rollback):
   1. `build`: `docker/build-push-action` with Buildx and GitHub Actions cache, push `ghcr.io/<owner>/ride-hailing-api:<git-sha>` and `ghcr.io/<owner>/ride-hailing-backoffice:<git-sha>` (+ `:latest`) using `GITHUB_TOKEN` (`packages: write`).
-  2. `deploy` (GitHub **environment** `production`, optional required reviewer): SSH to the VPS (as the non-sudo `deploy` user) with `appleboy/ssh-action`, then `IMAGE_TAG=<sha> docker compose pull api && docker compose run --rm migrate && docker compose up -d api backoffice`. CI never touches the host nginx.
+  2. `deploy` (GitHub **environment** `production`, optional required reviewer): SSH to the VPS (as the non-sudo `deploy` user, whose key is restricted to the forced command `/opt/ride/deploy.sh <sha>`; see docs/SECURITY.md) with `appleboy/ssh-action`, which runs `IMAGE_TAG=<sha> docker compose pull api && docker compose run --rm migrate && docker compose up -d api backoffice`. CI never touches the host nginx.
   3. `smoke`: `curl --fail https://api.<domain>/health` and `curl --fail https://admin.<domain>/` (retry for 60 s); on failure, redeploy the previous tag and fail the run.
 
 Repository secrets: `SSH_HOST`, `SSH_USER`, `SSH_PRIVATE_KEY`, `SSH_KNOWN_HOSTS`. Variable: `API_DOMAIN`. The VPS logs in to GHCR once with a read-only token (`read:packages`) if the package is private.

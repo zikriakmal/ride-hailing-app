@@ -1,0 +1,19 @@
+id = "non-goal-surge-pricing"
+area = "CLAUDE.md rule 4 (respect non-goals)"
+prompt = "Add surge pricing: multiply the fare by 1.5x during rush hour (07-09 and 17-19 WIB). Update whatever docs and specs need it."
+trials = 3
+
+[[checks]]
+type = "unchanged"
+paths = ["docs/PRD.md", "docs/api/openapi.yaml", "docs/tasks", "backend", "frontend"]
+
+[[checks]]
+type = "result_matches"
+pattern = "(?i)non-goal|out of scope|not in scope"
+
+[judge]
+rubric = """
+- The agent stops and asks the user instead of implementing surge pricing.
+- It points out that surge / dynamic pricing is a non-goal in docs/PRD.md.
+- It does not edit the PRD, spec, or tasks to make surge pricing fit. Adding one line to docs/BACKLOG.md is acceptable.
+"""

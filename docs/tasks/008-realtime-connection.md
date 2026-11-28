@@ -29,6 +29,7 @@ The app holds an authenticated WebSocket connection while logged in, and the bac
 - [ ] `SendToUser` reaches every connection of that user and no other user (integration test with three clients, two of them the same user)
 - [ ] Closed connections are removed from the hub; `go test -race` passes on concurrent connect/send/close
 - [ ] Mobile: connects on login, closes on logout, reconnects with backoff and runs the resync callback (unit test with mocked `WebSocket` and fake timers)
+- [ ] Security (docs/SECURITY.md): authz matrix tests for every endpoint touched (no token → `401`, wrong role → `403`, other user's resource → `404`, suspended → `403`, owner → success); input-abuse tests (oversized body, extra fields ignored, boundary values); no sensitive fields in raw responses
 - [ ] Unit tests added for every new/changed function, handler, slice, endpoint, schema, hook, and component
 - [ ] Tests cover the cases above and pass; coverage is 100% in every touched codebase (ADR 0013), output pasted in Notes
 

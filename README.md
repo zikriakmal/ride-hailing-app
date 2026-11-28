@@ -2,7 +2,7 @@
 
 A ride-hailing service: a backend API, a **Consumer app** (passengers) and a **Rider app** (motorbike drivers), plus a **Back office** web app for staff.
 
-> **Status:** planning. A stack is *proposed* (two Expo apps — Consumer and Rider — + Go/Gin backend + Postgres + WebSocket, hosted with Docker on an existing VPS behind its nginx and deployed by GitHub Actions; see `docs/decisions/`) and work is broken into tasks 001–027. No code yet.
+> **Status:** planning. A stack is *proposed* (two Expo apps — Consumer and Rider — + Go/Gin backend + Postgres + WebSocket, hosted with Docker on an existing VPS behind its nginx and deployed by GitHub Actions; see `docs/decisions/`) and work is broken into tasks 001–028. Security follows OWASP ([`docs/SECURITY.md`](docs/SECURITY.md)). No code yet.
 
 ## What it does (in scope)
 
@@ -26,6 +26,7 @@ A ride-hailing service: a backend API, a **Consumer app** (passengers) and a **R
 │   ├── PRD.md           # what we're building and why
 │   ├── ARCHITECTURE.md  # stack, data model, folder structure
 │   ├── INFRA.md         # hosting, CI/CD, runbook
+│   ├── SECURITY.md      # security rules (OWASP), vulnerability reporting
 │   ├── BACKLOG.md       # out-of-scope ideas parked for later
 │   ├── api/
 │   │   ├── openapi.yaml # REST contract (backend ↔ mobile)

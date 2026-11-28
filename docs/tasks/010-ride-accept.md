@@ -32,6 +32,8 @@ A rider taps Accept on an offer. The first rider wins; the consumer immediately 
 - [ ] Accept on expired/cancelled/accepted ride → `409 RIDE_NOT_AVAILABLE`; offline or on-trip rider → `409 RIDER_NOT_AVAILABLE`; consumer token → `403`
 - [ ] Consumer gets `ride:updated`; other offered riders get `ride:offer_withdrawn` `taken`
 - [ ] Mobile: both screens switch on accept
+- [ ] Consumer sees the rider's phone while the ride is active; `phone` is `null` in history responses (privacy rule)
+- [ ] Security (docs/SECURITY.md): authz matrix tests for every endpoint touched (no token → `401`, wrong role → `403`, other user's resource → `404`, suspended → `403`, owner → success); input-abuse tests (oversized body, extra fields ignored, boundary values); no sensitive fields in raw responses
 - [ ] Unit tests added for every new/changed function, handler, slice, endpoint, schema, hook, and component
 - [ ] Tests cover the cases above and pass; coverage is 100% in every touched codebase (ADR 0013), output pasted in Notes
 

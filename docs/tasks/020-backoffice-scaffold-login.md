@@ -35,6 +35,7 @@ Staff open the back office in a browser, log in with a `support` or `admin` acco
 - [ ] A dummy route behind `requireStaff` → `403` for consumer/rider; behind `requireAdmin` → `403` for support
 - [ ] Back office: staff login lands on the dashboard; consumer/rider login is refused with a message and no token stored; reload keeps the session; closing the tab ends it
 - [ ] Consumer and Rider apps still pass all their tests after the `TokenStorage` change
+- [ ] Security (docs/SECURITY.md): authz matrix tests for every endpoint touched (no token → `401`, wrong role → `403`, other user's resource → `404`, suspended → `403`, owner → success); input-abuse tests (oversized body, extra fields ignored, boundary values); no sensitive fields in raw responses
 - [ ] Unit tests added for every new/changed function, handler, slice, endpoint, schema, hook, and component
 - [ ] Tests cover the cases above and pass; coverage is 100% in every touched codebase (ADR 0013), output pasted in Notes
 

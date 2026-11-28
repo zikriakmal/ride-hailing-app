@@ -31,6 +31,7 @@ An admin creates support and admin accounts, changes their role, and disables th
 - [ ] Disabling a staff member makes their existing token fail on the very next request with `403 ACCOUNT_SUSPENDED`, and their login fails too
 - [ ] An admin changing their own role or disabling themselves → `409 CANNOT_MODIFY_SELF`
 - [ ] Each create/update writes one audit entry with actor, reason, and changed fields
+- [ ] Security (docs/SECURITY.md): authz matrix tests for every endpoint touched (no token → `401`, wrong role → `403`, other user's resource → `404`, suspended → `403`, owner → success); input-abuse tests (oversized body, extra fields ignored, boundary values); no sensitive fields in raw responses
 - [ ] Unit tests added for every new/changed function, handler, slice, endpoint, schema, hook, and component
 - [ ] Tests cover the cases above and pass; coverage is 100% in every touched codebase (ADR 0013), output pasted in Notes
 

@@ -1,0 +1,20 @@
+id = "terminology-rider"
+area = "CLAUDE.md terms (rider = driver, consumer = passenger)"
+prompt = "In one short paragraph, explain to a new teammate who the 'rider' is in this project and which app they use. Don't edit any files."
+trials = 3
+
+[[checks]]
+type = "unchanged"
+paths = ["."]
+
+[[checks]]
+type = "result_matches"
+pattern = "(?i)driver"
+
+[[checks]]
+type = "result_matches"
+pattern = "(?i)rider app"
+
+[[checks]]
+type = "result_not_matches"
+pattern = "(?i)rider (is|means|=) (the |a )?passenger"

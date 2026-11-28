@@ -31,6 +31,7 @@ Staff see every active ride on a list and a live map, open any ride's full timel
 - [ ] Force-cancel works from every active state; on `completed`/`cancelled`/`expired` → `409 INVALID_TRANSITION`; missing reason → `400`
 - [ ] After force-cancel both apps update within 5 s and show the support message; the rider can receive offers again
 - [ ] Back office: map markers move between polls; polling stops when the tab is hidden (fake timers + visibility test)
+- [ ] Security (docs/SECURITY.md): authz matrix tests for every endpoint touched (no token → `401`, wrong role → `403`, other user's resource → `404`, suspended → `403`, owner → success); input-abuse tests (oversized body, extra fields ignored, boundary values); no sensitive fields in raw responses
 - [ ] Unit tests added for every new/changed function, handler, slice, endpoint, schema, hook, and component
 - [ ] Tests cover the cases above and pass; coverage is 100% in every touched codebase (ADR 0013), output pasted in Notes
 

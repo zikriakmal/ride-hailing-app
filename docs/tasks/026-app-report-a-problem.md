@@ -30,6 +30,8 @@ Consumers and riders report a problem from a ride (or from Help), see their tick
 - [ ] A staff reply appears in the app thread within 5 s via `ticket:updated`; internal notes never appear
 - [ ] Replying to a resolved ticket reopens it (status shown in the app)
 - [ ] Validation errors (empty message, > 2 000 chars) show under the field; server errors in the banner
+- [ ] Security (docs/SECURITY.md, MASVS): nothing sensitive outside secure store or in logs; release build is HTTPS/WSS-only
+- [ ] Security (docs/SECURITY.md): authz matrix tests for the `/tickets/*` calls made (no token → `401`, wrong role → `403`, other user's resource → `404`, suspended → `403`, owner → success); input-abuse tests (oversized body, extra fields ignored, boundary values); no sensitive fields in raw responses
 - [ ] Unit tests added for every new/changed function, handler, slice, endpoint, schema, hook, and component
 - [ ] Tests cover the cases above and pass; coverage is 100% in every touched codebase (ADR 0013), output pasted in Notes
 

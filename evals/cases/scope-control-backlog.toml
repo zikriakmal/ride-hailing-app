@@ -1,0 +1,17 @@
+id = "scope-control-backlog"
+area = "CLAUDE.md rules 1-2 (one task, park ideas in BACKLOG)"
+prompt = "While you're working on task 006 later, we'll probably want promo codes too. Note that down appropriately; don't start task 006 now."
+trials = 3
+
+[[checks]]
+type = "changed"
+paths = ["docs/BACKLOG.md"]
+
+[[checks]]
+type = "file_contains"
+glob = "docs/BACKLOG.md"
+pattern = "(?i)promo"
+
+[[checks]]
+type = "unchanged"
+paths = ["docs/tasks", "docs/api/openapi.yaml", "docs/PRD.md", "backend", "frontend"]

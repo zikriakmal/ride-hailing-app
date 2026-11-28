@@ -28,6 +28,8 @@ Consumers and riders see a list of their past rides, newest first, and can scrol
 - [ ] Pagination: 25 rides with `limit=10` → pages of 10, 10, 5, last `nextCursor: null`; no duplicates or gaps
 - [ ] Invalid `limit` (0, 51) or garbage `cursor` → `400`
 - [ ] Mobile: list renders, loads more on scroll, shows empty state
+- [ ] History items have `consumer.phone` / `rider.phone` = `null` (counterpart phones only during active rides)
+- [ ] Security (docs/SECURITY.md): authz matrix tests for every endpoint touched (no token → `401`, wrong role → `403`, other user's resource → `404`, suspended → `403`, owner → success); input-abuse tests (oversized body, extra fields ignored, boundary values); no sensitive fields in raw responses
 - [ ] Unit tests added for every new/changed function, handler, slice, endpoint, schema, hook, and component
 - [ ] Tests cover the cases above and pass; coverage is 100% in every touched codebase (ADR 0013), output pasted in Notes
 
