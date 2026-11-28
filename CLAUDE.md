@@ -54,6 +54,7 @@ Filled in by tasks 001 and 002. Until then they are `TBD`.
   - Types: `feat` (new behavior), `fix` (bug fix), `hotfix` (urgent production fix, deployed right away), `docs`, `test`, `refactor`, `chore` (tooling, deps, config), `ci`, `build`.
   - Scopes: an area like `auth`, `rides`, `tickets`, `admin`, `backoffice`, `consumer-app`, `rider-app`, `infra`, `api`.
   - Breaking API change: add `!` (`feat(api)!: …`) and a `BREAKING CHANGE:` footer.
+- Commits: small, one logical change, imperative mood (`Add login endpoint`).
 - API: camelCase fields, string (uuid) IDs, ISO 8601 UTC timestamps, money as integer IDR. Every HTTP response body is the envelope `{ status, data, errors }`; validation errors are one `errors` item per field.
 - Clients write over REST; the server pushes over WebSocket `/ws` (ADR 0004).
 - Backend: Gin handlers implement the generated `oapi-codegen` interface; DB access through GORM repositories; schema changes are `goose` SQL migrations (ADRs 0002, 0003).
